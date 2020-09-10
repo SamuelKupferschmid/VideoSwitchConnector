@@ -11,5 +11,9 @@ namespace BmdSwitcher
         IList<SwitcherInput> Inputs { get; }
 
         public SwitcherInput CurrentProgramInput { get; }
+
+        public event EventHandler CurrentProgramInputChanged;
+
+        public void SetProgramInput(long id);
     }
 }

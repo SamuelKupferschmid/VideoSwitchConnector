@@ -12,13 +12,14 @@ namespace BmdSwitcher
         private IBMDSwitcher _switcher;
         private IBMDSwitcherMixEffectBlock _effectBlock;
 
+        public event EventHandler CurrentProgramInputChanged;
+
         public void Connect(string deviceAddress)
         {
             var discovery = new BMDSwitcherAPI.CBMDSwitcherDiscoveryClass();
             discovery.ConnectTo(deviceAddress, out this._switcher, out var reason);
 
-            this.Inputs = this.Iterate<IBMDSwitcherInputIterator, IBMDSwitcherInput>(iterator => iterator.Next).Select(GetInput).ToList();
-
+            this.Inputs = this.Iterate<IBMDSwitcherInputIterator, IBMDSwitcherInput>(iterator => iterator.Next).Select(GetInput).Where(input => input.Cut).ToList();
             // ATEM Mini Pro only has one MixEffectBlock
             this._effectBlock = Iterate<IBMDSwitcherMixEffectBlockIterator, IBMDSwitcherMixEffectBlock>(iterator => iterator.Next).First();
 
@@ -28,13 +29,15 @@ namespace BmdSwitcher
 
         SwitcherInput GetInput(IBMDSwitcherInput comInput)
         {
+            comInput.GetInputAvailability(out var availability);
             comInput.GetLongName(out var name);
             comInput.GetInputId(out var id);
 
             return new SwitcherInput
             {
                 Id = id,
-                Name = name
+                Name = name,
+                Cut = availability.HasFlag(_BMDSwitcherInputAvailability.bmdSwitcherInputAvailabilityInputCut)
             };
         }
 
@@ -52,7 +55,7 @@ namespace BmdSwitcher
         protected void updateCurrentProgramInput()
         {
             this._effectBlock.GetProgramInput(out var value);
-            this.CurrentProgramInput = this.Inputs.First(input => input.Id == value);
+            this.CurrentProgramInput = this.Inputs.FirstOrDefault(input => input.Id == value);
         }
 
         public SwitcherInput CurrentProgramInput { get; protected set; }
@@ -82,6 +85,10 @@ namespace BmdSwitcher
             }
         }
 
+        public void SetProgramInput(long id)
+        {
+            this._effectBlock.SetProgramInput(id);
+        }
 
         class EffectBlockHandler : IBMDSwitcherMixEffectBlockCallback
         {
@@ -97,6 +104,7 @@ namespace BmdSwitcher
                 {
                     case _BMDSwitcherMixEffectBlockEventType.bmdSwitcherMixEffectBlockEventTypeProgramInputChanged:
                         this.switcher.updateCurrentProgramInput();
+                        this.switcher.CurrentProgramInputChanged?.Invoke(this, EventArgs.Empty);
                         break;
                 }
             }
